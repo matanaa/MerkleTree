@@ -1,4 +1,5 @@
 import hashlib
+from Crypto.PublicKey import RSA
 
 class node:
     def __init__(self,saveData=True):
@@ -10,24 +11,43 @@ class node:
         self.father = None
         self.is_Leaf = False
 
+    def __eq__(self, other):
+        if other == None:
+            return False
+        return self.hash_value == other.hash_value
+
+    def __copy__(self):
+        copyObj = node()
+        copyObj.hash_value = self.hash_value
+        copyObj.right = self.right
+        copyObj.left = self.left
+        copyObj.data = self.data
+        copyObj.saveData = self.saveData
+        copyObj.father = self.father
+        copyObj.is_Leaf = self.is_Leaf
+        return copyObj
+
     def getHashValue(self):
         return self.hash_value
 
     def setHashValue(self,data):
-        self.hash_value = hashlib.sha224(data).hexdigest()
+        self.hash_value = hashlib.sha224(data.encode()).hexdigest()
 
     def updateHashValueForNode(self):
-        if self.right != None and self.left != None:
+        if self.right is not None and self.left is not None:
             self.setHashValue(self.right.getHashValue() + self.left.getHashValue())
 
-        elif self.left != None:
+        elif self.left is not None:
             self.setHashValue(self.left.getHashValue())
 
-        elif self.right != None:
+        elif self.right is not None:
             self.setHashValue(self.right.getHashValue())
         else:
             return 0
-        self.father.updateHashValueForNode()
+        if self.father is not None:
+            print(self,self.father)
+            self.father.updateHashValueForNode()
+
         return 1
 
     def setRight(self,right):
@@ -69,6 +89,8 @@ class node:
         return  self.father
 
 
+
+
 def __find_smallest_path_to_leaf(root, count=0):
     if root.isLeaf():
         return (0, root)
@@ -80,7 +102,6 @@ def __find_smallest_path_to_leaf(root, count=0):
     else:
         return (right_size +1 , right_node)
 
-
 def __add_leaf_to_exsisting_node(root,data):
 
     if root.isNode() and root.getLeft() is None:
@@ -88,7 +109,7 @@ def __add_leaf_to_exsisting_node(root,data):
         leaf.setLeaf(data)
 
         root.setLeft(leaf)
-        leaf.father(root)
+        leaf.father=root
         return 1
 
     elif root.isNode() and root.getRight() is None:
@@ -96,7 +117,7 @@ def __add_leaf_to_exsisting_node(root,data):
         leaf.setLeaf(data)
 
         root.setRight(leaf)
-        leaf.father(root)
+        leaf.father =root
         return 1
 
     elif root.isNode() and root.getLeft().isNode() and __add_leaf_to_exsisting_node(root.getLeft(),data) == 1:
@@ -141,27 +162,71 @@ def add_leaf(root,data):
     if __add_leaf_to_exsisting_node(root,data) == 1:
         return 1
     else:
-        size, found_node = __find_smallest_path_to_leaf(root)
-        leaf = node()
-        leaf.setLeaf(data)
-        left = found_node
+        size, found_node = __find_smallest_path_to_leaf(root) # this leaf will replace to node
+        right_leaf = node()
+        right_leaf.setLeaf(data)
+        left_leaf =node()
+        left_leaf.data = found_node.data
+        left_leaf.hash_value = found_node.hash_value
 
-        found_node.setLeft(left)
-        left.father(found_node)
 
-        found_node.setRight(leaf)
-        leaf.father(found_node)
+        left_leaf.setFather(found_node)
+        found_node.setLeft(left_leaf)
+
+
+        right_leaf.setFather(found_node)
+        found_node.setRight(right_leaf)
+
         return 1
 
-# def create_Proof_of_Inclusion(root,id):
-#     id,curr  =__get_preorder_leaf_by_id(root, id)
-#     father = curr.father
-#     while father.father !=None and father.father.father !=None:
-#         father = father.father
-#
-#
-#
-#     print (f"{root.getHashValue()} {curr.getHashValue()},{curr.father.getHashValue()},{}")
+def create_Proof_of_Inclusion(root,id):
+    id,curr  =__get_preorder_leaf_by_id(root, id)
+    if curr is None or curr.father is None:
+        return "not found"
+    father = curr.father
+    now = curr
+
+    while father.father !=None :
+        now = father
+        father = father.father
+
+
+    if father.getLeft() == now :
+        next_hash = father.getRight()
+    else:
+        next_hash = father.getLeft()
+    return f"{root.getHashValue()} {curr.getHashValue()},{curr.father.getHashValue()},{next_hash.getHashValue()}"
+
+def generate_RSA(bits=2048):
+    '''
+    Generate an RSA keypair with an exponent of 65537 in PEM format
+    param: bits The key length in bits
+    Return private key and public key
+    '''
+    from Crypto.PublicKey import RSA
+    new_key = RSA.generate(bits, e=65537)
+    public_key = new_key.publickey().exportKey("PEM")
+    private_key = new_key.exportKey("PEM")
+    return private_key, public_key
+
+
+root_node = node()
+while True:
+    action = input("Enter action :")
+    if action.strip() == "1":
+        data = input("Enter data :")
+        add_leaf(root_node,data)
+
+    if action.strip() == "2":
+        print(f"Root node key is : {root_node.getHashValue()}")
+    if action.strip() == "3":
+        data = input("Enter row id :")
+        print(f"proof for leaf {data} : {create_Proof_of_Inclusion(root_node,int(data.strip()))}")
+    if action.strip() == "5":
+        private_key, public_key = generate_RSA()
+        print(private_key.decode())
+        print(public_key.decode())
+
 
 
 
