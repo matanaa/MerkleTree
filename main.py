@@ -209,7 +209,18 @@ def generate_RSA(bits=2048):
     private_key = new_key.exportKey("PEM")
     return private_key, public_key
 
-
+def multi_line_input(show=None):
+    if show:
+        print(show,end='')
+    lines = []
+    while True:
+        line = input()
+        if line:
+            lines.append(line)
+        else:
+            break
+    text = '\n'.join(lines)
+    return text
 root_node = node()
 while True:
     action = input("Enter action :")
@@ -219,13 +230,21 @@ while True:
 
     if action.strip() == "2":
         print(f"Root node key is : {root_node.getHashValue()}")
+
     if action.strip() == "3":
         data = input("Enter row id :")
         print(f"proof for leaf {data} : {create_Proof_of_Inclusion(root_node,int(data.strip()))}")
+
     if action.strip() == "5":
         private_key, public_key = generate_RSA()
         print(private_key.decode())
         print(public_key.decode())
+
+    if action.strip() == "6":
+        data = multi_line_input("enter key: ")
+
+
+
 
 
 
