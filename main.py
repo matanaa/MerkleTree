@@ -1,6 +1,9 @@
+import base64
 import hashlib
 from Crypto.PublicKey import RSA
-
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.backends import default_backend
 class node:
     def __init__(self,saveData=True):
         self.hash_value=None
@@ -9,12 +12,12 @@ class node:
         self.data = None
         self.saveData = saveData
         self.father = None
-        self.is_Leaf = False
+        self.is_Leaf = True
 
-    def __eq__(self, other):
-        if other == None:
-            return False
-        return self.hash_value == other.hash_value
+    # def __eq__(self, other):
+    #     if other == None:
+    #         return False
+    #     return self.hash_value == other.hash_value
 
     def __copy__(self):
         copyObj = node()
@@ -35,7 +38,7 @@ class node:
 
     def updateHashValueForNode(self):
         if self.right is not None and self.left is not None:
-            self.setHashValue(self.right.getHashValue() + self.left.getHashValue())
+            self.setHashValue(self.left.getHashValue() + self.right.getHashValue() )
 
         elif self.left is not None:
             self.setHashValue(self.left.getHashValue())
@@ -58,6 +61,8 @@ class node:
         self.updateHashValueForNode()
 
     def getRight(self):
+        if self.right == None:
+            return None
         return self.right
 
 
@@ -68,6 +73,8 @@ class node:
         self.updateHashValueForNode()
 
     def getLeft(self):
+        if self.left == None :
+            return None
         return self.left
 
     def setLeaf(self,data):
@@ -120,10 +127,12 @@ def __add_leaf_to_exsisting_node(root,data):
         leaf.father =root
         return 1
 
-    elif root.isNode() and root.getLeft().isNode() and __add_leaf_to_exsisting_node(root.getLeft(),data) == 1:
+    elif root.isNode() and root.getLeft() and root.getLeft().isNode() and __add_leaf_to_exsisting_node(root.getLeft(),data) == 1:
         return 1
 
-    elif root.isNode() and root.getLeft().isNode() and __add_leaf_to_exsisting_node(root.getLeft(), data) == 1:
+
+    elif root.isNode() and root.getRight() and root.getRight().isNode() and __add_leaf_to_exsisting_node(root.getRight(),
+                                                                                                       data) == 1:
         return 1
     return 0
 
@@ -151,9 +160,11 @@ def __get_preorder_leaf_by_id(root,id):
 
     if root.getLeft() is not None:
         id,curr  = __get_preorder_leaf_by_id(root.getLeft(), id)
+        if curr is not None:
+            return (id, curr)
 
     if root.getRight() is not None:
-        id,curr  = __get_preorder_leaf_by_id(root.getLeft(), id)
+        id,curr  = __get_preorder_leaf_by_id(root.getRight(), id)
 
     return (id,curr)
 
@@ -179,25 +190,76 @@ def add_leaf(root,data):
 
         return 1
 
+def Get_Brother_Hash(son):
+    curr_bro_hash = ''
+    if son.father.getLeft() == son:
+        if son.father.getRight():
+            curr_bro_hash = "1"+son.father.getRight().getHashValue()
+
+    elif son.father.getLeft():
+            curr_bro_hash  = "0"+son.father.getLeft().getHashValue()
+
+    return curr_bro_hash
+
+
 def create_Proof_of_Inclusion(root,id):
     id,curr  =__get_preorder_leaf_by_id(root, id)
     if curr is None or curr.father is None:
         return "not found"
     father = curr.father
     now = curr
+    hashlist = ""
 
     while father.father !=None :
+        hashlist += ","+Get_Brother_Hash(now)
         now = father
         father = father.father
+    hashlist += "," + Get_Brother_Hash(now)
+
+    #
+    # if father.getLeft() == now :
+    #     next_hash = "1"+father.getRight()
+    # else:
+    #     next_hash = "0"+father.getLeft()
+    #
+    # if curr.father.getLeft() == curr :
+    #     curr_bro = "1"+curr.father.getRight()
+    # else:
+    #     curr_bro = "0"+curr.father.getLeft()
+    #
+    #     if curr_bro is '':
+    #         curr_bro = node()
+    #         curr_bro.hash_value = ''
+    if hashlist is '':
+        hashlist = Get_Brother_Hash(curr)
+
+    return f"{hashlist},{root.getHashValue()}"
+
+def verify_Proof_of_Inclusion(node_data,proof):
+    proof = proof.split(',')
+    node_hash = hashlib.sha224(node_data.encode()).hexdigest()
+    hash_value = ''
+    if proof[0] is not '':
+        if proof[0].startswith('0'):
+            hash_value = hashlib.sha224(proof[0][1:].encode()+node_hash.encode()).hexdigest()
+        else:
+            hash_value = hashlib.sha224( node_hash.encode() + proof[0][1:].encode() ).hexdigest()
+
+    for i in range(1,len(proof)-1):
+        p = proof[i]
+        if p.startswith('0'):
+            hash_value = hashlib.sha224(p[1:].encode()+hash_value.encode()).hexdigest()
+        else:
+            hash_value = hashlib.sha224( hash_value.encode() + p[1:].encode() ).hexdigest()
+
+    return hash_value == proof[len(proof)-1]
 
 
-    if father.getLeft() == now :
-        next_hash = father.getRight()
-    else:
-        next_hash = father.getLeft()
-    return f"{root.getHashValue()} {curr.getHashValue()},{curr.father.getHashValue()},{next_hash.getHashValue()}"
 
-def generate_RSA(bits=2048):
+
+
+
+def old_generate_RSA(bits=2048):
     '''
     Generate an RSA keypair with an exponent of 65537 in PEM format
     param: bits The key length in bits
@@ -208,6 +270,73 @@ def generate_RSA(bits=2048):
     public_key = new_key.publickey().exportKey("PEM")
     private_key = new_key.exportKey("PEM")
     return private_key, public_key
+
+
+def generate_RSA(bits=2048):
+    '''
+    Generate an RSA keypair with an exponent of 65537 in PEM format
+    param: bits The key length in bits
+    Return private key and public key
+    '''
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=bits,
+        backend=default_backend()
+    )
+
+    public_key = private_key.public_key()
+    public_key_pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption()
+
+    )
+
+    return  private_key_pem, public_key_pem
+
+
+def sign_data(key_text, data):
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import padding
+    private_key = serialization.load_pem_private_key(key_text.encode(), None, backend=default_backend())
+
+    signature = private_key.sign(
+        data.encode(),
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH
+        ),
+        hashes.SHA256()
+    )
+    return base64.b64encode(signature)
+
+
+def verify_data(key_text, signature,message):
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import padding
+    try:
+        public_key = serialization.load_pem_public_key(key_text.encode(), backend=default_backend())
+
+        decrtpyed = public_key.verify(
+                        base64.b64decode(signature.encode()),
+                        message.encode(),
+                        padding.PSS(
+                        mgf=padding.MGF1(hashes.SHA256()),
+                        salt_length=padding.PSS.MAX_LENGTH
+                        ),
+                        hashes.SHA256()
+                        )
+        return True
+    except:
+        return False
+
+
+
+
 
 def multi_line_input(show=None):
     if show:
@@ -222,26 +351,42 @@ def multi_line_input(show=None):
     text = '\n'.join(lines)
     return text
 root_node = node()
+root_node.is_Leaf = False
 while True:
     action = input("Enter action :")
     if action.strip() == "1":
         data = input("Enter data :")
         add_leaf(root_node,data)
 
-    if action.strip() == "2":
+    elif action.strip() == "2":
         print(f"Root node key is : {root_node.getHashValue()}")
 
-    if action.strip() == "3":
+    elif action.strip() == "3":
         data = input("Enter row id :")
         print(f"proof for leaf {data} : {create_Proof_of_Inclusion(root_node,int(data.strip()))}")
 
-    if action.strip() == "5":
+    elif action.strip() == "4":
+        data = input("Enter proof :")
+
+        print(f"proof for leaf {data} : {verify_Proof_of_Inclusion(data.split(',', 1)[0],data.split(',', 1)[1])}")
+
+    elif action.strip() == "5":
         private_key, public_key = generate_RSA()
         print(private_key.decode())
         print(public_key.decode())
 
-    if action.strip() == "6":
-        data = multi_line_input("enter key: ")
+    elif action.strip() == "6":
+        key = multi_line_input("enter key: ")
+        print(sign_data(key, root_node.getHashValue()).decode())
+
+    elif action.strip() == "7":
+        key_text = multi_line_input("enter key: ")
+        signature = input("Enter signature:")
+        message = input("Enter message:")
+
+        print (verify_data(key_text, signature, message))
+
+
 
 
 
