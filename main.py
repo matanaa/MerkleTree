@@ -384,8 +384,7 @@ while True:
         signature = input("Enter signature:")
         message = input("Enter message:")
 
-        print (verify_data(key_text, signature, message))
-
+        print  (verify_data(key_text, signature, message))
 
 
 
